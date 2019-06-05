@@ -12,7 +12,7 @@
 #           be imported.
 
 ###########################
-# Group Members: TODO
+# Group Members: Ioakim Ioakim
 ###########################
 
 
@@ -108,8 +108,7 @@ def mix_server_one_hop(private_key, message_list):
         out_queue += [output]
 
     return sorted(out_queue)
-        
-        
+
 def mix_client_one_hop(public_key, address, message):
     """
     Encode a message to travel through a single mix with a set public key. 
@@ -132,11 +131,27 @@ def mix_client_one_hop(public_key, address, message):
     private_key = G.order().random()
     client_public_key  = private_key * G.generator()
 
+    shared_element = private_key * public_key
+    key_material = sha512(shared_element.export()).digest()
+
+    # Use different parts of the shared key for different operations
+    hmac_key = key_material[:16]
+    address_key = key_material[16:32]
+    message_key = key_material[32:48]
+
     ## ADD CODE HERE
+    iv = b"\x00"*16
+
+    address_cipher = aes_ctr_enc_dec(address_key, iv, address_plaintext)
+    message_cipher = aes_ctr_enc_dec(message_key, iv, message_plaintext)
+
+    ## Check the HMAC
+    h = Hmac(b"sha512", hmac_key)        
+    h.update(address_cipher)
+    h.update(message_cipher)
+    expected_mac = h.digest()[:20]
 
     return OneHopMixMessage(client_public_key, expected_mac, address_cipher, message_cipher)
-
-    
 
 #####################################################
 # TASK 3 -- Build a n-hop mix client.
@@ -200,7 +215,6 @@ def mix_server_n_hop(private_key, message_list, final=False):
 
         h.update(msg.address)
         h.update(msg.message)
-
         expected_mac = h.digest()
 
         if not secure_compare(msg.hmacs[0], expected_mac[:20]):
@@ -238,7 +252,6 @@ def mix_server_n_hop(private_key, message_list, final=False):
 
     return out_queue
 
-
 def mix_client_n_hop(public_keys, address, message):
     """
     Encode a message to travel through a sequence of mixes with a sequence public keys. 
@@ -261,11 +274,24 @@ def mix_client_n_hop(public_keys, address, message):
     private_key = G.order().random()
     client_public_key  = private_key * G.generator()
 
-    ## ADD CODE HERE
+    hmacs = []
+
+    for public_key in public_keys:
+        shared_element = private_key * public_key
+        key_material = sha512(shared_element.export()).digest()
+        hmac_key = key_material[:16]
+        address_key = key_material[16:32]
+        message_key = key_material[32:48]
+        iv = b"\x00"*16
+        address_cipher = aes_ctr_enc_dec(address_key, iv, address_plaintext)
+        message_cipher = aes_ctr_enc_dec(message_key, iv, message_plaintext)
+        h = Hmac(b"sha512", hmac_key)        
+        h.update(address_cipher)
+        h.update(message_cipher)
+        expected_mac = h.digest()[:20]
+        hmacs += [expected_mac]
 
     return NHopMixMessage(client_public_key, hmacs, address_cipher, message_cipher)
-
-
 
 #####################################################
 # TASK 4 -- Statistical Disclosure Attack
@@ -300,7 +326,6 @@ def generate_trace(number_of_users, threshold_size, number_of_rounds, targets_fr
 
     random.shuffle(trace)
     return trace
-
 
 from collections import Counter
 

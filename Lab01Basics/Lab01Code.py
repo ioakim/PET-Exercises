@@ -8,7 +8,7 @@
 # $ py.test-2.7 -v Lab01Tests.py 
 
 ###########################
-# Group Members: TODO
+# Group Members: Ioakim Ioakim
 ###########################
 
 
@@ -34,8 +34,11 @@ def encrypt_message(K, message):
     """ Encrypt a message under a key K """
 
     plaintext = message.encode("utf8")
+    aes = Cipher("aes-128-gcm")
+    iv = urandom(16)
+
     
-    ## YOUR CODE HERE
+    ciphertext, tag = aes.quick_gcm_enc(K, iv, plaintext)
 
     return (iv, ciphertext, tag)
 
@@ -44,7 +47,8 @@ def decrypt_message(K, iv, ciphertext, tag):
 
         In case the decryption fails, throw an exception.
     """
-    ## YOUR CODE HERE
+    aes = Cipher("aes-128-gcm")
+    plain = aes.quick_gcm_dec(K, iv, ciphertext, tag)
 
     return plain.encode("utf8")
 
@@ -78,7 +82,7 @@ def is_point_on_curve(a, b, p, x, y):
     assert (isinstance(x, Bn) and isinstance(y, Bn)) \
            or (x == None and y == None)
 
-    if x == None and y == None:
+    if x is None and y is None:
         return True
 
     lhs = (y * y) % p
@@ -86,7 +90,6 @@ def is_point_on_curve(a, b, p, x, y):
     on_curve = (lhs == rhs)
 
     return on_curve
-
 
 def point_add(a, b, p, x0, y0, x1, y1):
     """Define the "addition" operation for 2 EC Points.
@@ -100,16 +103,43 @@ def point_add(a, b, p, x0, y0, x1, y1):
     Return the point resulting from the addition. Raises an Exception if the points are equal.
     """
 
+    assert isinstance(a, Bn)
+    assert isinstance(b, Bn)
+    assert isinstance(p, Bn) and p > 0
+
+    if (x0 is x1) and (y0 is y1):
+        raise Exception('EC Points must not be equal')
+    
+    if (x0 is x1) or not (is_point_on_curve(a, b, p, x0, y0) 
+            and is_point_on_curve(a, b, p, x1, y1)):
+        return (None, None)
+    
+    if ((x0 is None) and (y0 is None)):
+        return (x1,y1)
+
+    if ((x1 is None) and (y1 is None)):
+        return (x0,y0)
+    
+
     # ADD YOUR CODE BELOW
     xr, yr = None, None
-    
+
+    #lam = ((y0.int_sub(y1)).int_mul((x0.int_sub(x1))).mod_inverse(p)).mod(p)
+    lam = ((y0 -y1) * (x0 - x1).mod_inverse(p)).mod(p)
+
+    #xr = ((lam.pow(2).int_sub(x0)).int_sub(x1)).mod(p)
+    xr = (lam.pow(2) - x1 - x0).mod(p)
+
+    #yr = ((lam.int_mul((x0.int_sub(xr)))).int_sub(y0)).mod(p)
+    yr = (lam * (x1 - xr) - y1).mod(p)
+
     return (xr, yr)
 
 def point_double(a, b, p, x, y):
     """Define "doubling" an EC point.
-     A special case, when a point needs to be added to itself.
+    A special case, when a point needs to be added to itself.
 
-     Reminder:
+    Reminder:
         lam = (3 * xp ^ 2 + a) * (2 * yp) ^ -1 (mod p)
         xr  = lam ^ 2 - 2 * xp
         yr  = lam * (xp - xr) - yp (mod p)
@@ -119,6 +149,18 @@ def point_double(a, b, p, x, y):
 
     # ADD YOUR CODE BELOW
     xr, yr = None, None
+
+    if ((x is None) and (y is None)):
+        return (None, None)
+
+    #lam = (((Bn(3).int_mul(x).pow(2)).int_add(a)).int_mul((Bn(2).int_mul(y)).mod_inverse(p))).mod(p)
+    lam = ((3 * x.pow(2) + a) * (2*y).mod_inverse(p)).mod(p)
+
+    #xr = lam.pow(Bn(2)).int_sub((Bn(2).int_mul(x)))
+    xr = (lam.pow(2) - (2 * x)).mod(p)
+
+    #yr = (lam.int_mul(x.int_sub(xr)).int_sub(y)).mod(p)
+    yr = (lam * (x - xr) - y).mod(p)
 
     return xr, yr
 
@@ -140,7 +182,11 @@ def point_scalar_multiplication_double_and_add(a, b, p, x, y, scalar):
     P = (x, y)
 
     for i in range(scalar.num_bits()):
-        pass ## ADD YOUR CODE HERE
+        p1, p2 = P
+        if (scalar.is_bit_set(i)):#if bit is 1
+            q1, q2 = Q
+            Q = point_add(a, b, p, q1, q2, p1, p2)
+        P = point_double(a, b, p, p1, p2)
 
     return Q
 
@@ -166,7 +212,14 @@ def point_scalar_multiplication_montgomerry_ladder(a, b, p, x, y, scalar):
     R1 = (x, y)
 
     for i in reversed(range(0,scalar.num_bits())):
-        pass ## ADD YOUR CODE HERE
+        p1, p2 = R0
+        q1, q2 = R1
+        if not scalar.is_bit_set(i):#if bit is 0
+            R1 = point_add(a, b, p, p1, p2, q1, q2)
+            R0 = point_double(a, b, p, p1, p2)
+        else:
+            R0 = point_add(a, b, p, p1, p2, q1, q2)
+            R1 = point_double(a, b, p, q1, q2)
 
     return R0
 
@@ -191,12 +244,13 @@ def ecdsa_key_gen():
     pub_verify = priv_sign * G.generator()
     return (G, priv_sign, pub_verify)
 
-
 def ecdsa_sign(G, priv_sign, message):
     """ Sign the SHA256 digest of the message using ECDSA and return a signature """
     plaintext =  message.encode("utf8")
 
-    ## YOUR CODE HERE
+    digest = sha256(plaintext).digest()
+
+    sig = do_ecdsa_sign(G, priv_sign, digest)
 
     return sig
 
@@ -204,7 +258,9 @@ def ecdsa_verify(G, pub_verify, message, sig):
     """ Verify the ECDSA signature on the message """
     plaintext =  message.encode("utf8")
 
-    ## YOUR CODE HERE
+    digest = sha256(plaintext).digest()
+
+    res = do_ecdsa_verify(G, pub_verify, sig, digest)
 
     return res
 
@@ -223,7 +279,6 @@ def dh_get_key():
     pub_enc = priv_dec * G.generator()
     return (G, priv_dec, pub_enc)
 
-
 def dh_encrypt(pub, message, aliceSig = None):
     """ Assume you know the public key of someone else (Bob), 
     and wish to Encrypt a message for them.
@@ -232,9 +287,15 @@ def dh_encrypt(pub, message, aliceSig = None):
         - Use the shared key to AES_GCM encrypt the message.
         - Optionally: sign the message with Alice's key.
     """
-    
-    ## YOUR CODE HERE
-    pass
+    G, priv_dec, pub_enc = dh_get_key()
+
+    shared, _ = pub.pt_mul(priv_dec).get_affine()
+
+    iv, ciphertext, tag = encrypt_message(shared, message)
+
+    cipherlist = [iv, ciphertext, tag, pub_enc]
+
+    return cipherlist
 
 def dh_decrypt(priv, ciphertext, aliceVer = None):
     """ Decrypt a received message encrypted using your public key, 
@@ -242,7 +303,16 @@ def dh_decrypt(priv, ciphertext, aliceVer = None):
     the message came from Alice using her verification key."""
     
     ## YOUR CODE HERE
-    pass
+    iv = ciphertext[1]
+    ctext = ciphertext[2]
+    tag = ciphertext[3]
+    pub_enc = ciphertext[4]
+
+    shared, _ = pub_enc.pt_mul(priv).get_affine()
+
+    plaintext = decrypt_message(shared, iv, ctext, tag)
+
+    return plaintext
 
 ## NOTE: populate those (or more) tests
 #  ensure they run using the "py.test filename" command.
@@ -250,10 +320,24 @@ def dh_decrypt(priv, ciphertext, aliceVer = None):
 #  $ py.test-2.7 --cov-report html --cov Lab01Code Lab01Code.py 
 
 def test_encrypt():
-    assert False
+    message = "Hello"
+    G, priv_dec, pub_enc = dh_get_key()
+
+    cipherlist = dh_encrypt(pub_enc, message)
+    iv = cipherlist[1]
+    ciphertext = cipherlist[2]
+
+    assert len(iv) == 16
+    assert len(ciphertext) == len("Hello")
 
 def test_decrypt():
-    assert False
+    message = "Hello"
+    G, priv_dec, pub_enc = dh_get_key()
+    cipherlist = dh_encrypt(pub_enc, message)
+
+    plaintext = dh_decrypt(priv_dec, cipherlist)
+
+    assert plaintext == "Hello"
 
 def test_fails():
     assert False

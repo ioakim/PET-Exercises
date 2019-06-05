@@ -31,7 +31,8 @@ def keyGen(params):
    """ Generate a private / public key pair """
    (G, g, h, o) = params
    
-   # ADD CODE HERE
+   priv = o.random()
+   pub = priv*g
 
    return (priv, pub)
 
@@ -39,8 +40,12 @@ def encrypt(params, pub, m):
     """ Encrypt a message under the public key """
     if not -100 < m < 100:
         raise Exception("Message value to low or high.")
+    
 
-   # ADD CODE HERE
+
+    (G, g, h, o) = params
+    k = o.random()
+    c = (k*g,k*pub+m*h)
 
     return c
 
@@ -74,9 +79,9 @@ def decrypt(params, priv, ciphertext):
     """ Decrypt a message using the private key """
     assert isCiphertext(params, ciphertext)
     a , b = ciphertext
-
-   # ADD CODE HERE
-
+    (G, g, h, o) = params
+    hm = b + (priv*a).pt_neg()
+    
     return logh(params, hm)
 
 #####################################################
@@ -91,8 +96,13 @@ def add(params, pub, c1, c2):
     assert isCiphertext(params, c1)
     assert isCiphertext(params, c2)
 
-   # ADD CODE HERE
+    a1, b1 = c1
+    a2, b2 = c2
 
+    a3 = a1 + a2
+    b3 = b1 + b2
+
+    c3 = (a3, b3)
     return c3
 
 def mul(params, pub, c1, alpha):
@@ -100,8 +110,8 @@ def mul(params, pub, c1, alpha):
         product of the plaintext time alpha """
     assert isCiphertext(params, c1)
 
-   # ADD CODE HERE
-
+    a, b = c1
+    c3 = (alpha * a, alpha * b)
     return c3
 
 #####################################################
@@ -113,7 +123,10 @@ def groupKey(params, pubKeys=[]):
     """ Generate a group public key from a list of public keys """
     (G, g, h, o) = params
 
-   # ADD CODE HERE
+    pub = G.infinite()
+
+    for key in pubKeys:
+        pub = pub.pt_add(key)
 
     return pub
 
@@ -122,7 +135,10 @@ def partialDecrypt(params, priv, ciphertext, final=False):
         If final is True, then return the plaintext. """
     assert isCiphertext(params, ciphertext)
     
-    # ADD CODE HERE
+    (G, g, h, o) = params
+    a1, b1 = ciphertext
+
+    b1 = b1 + (priv*a1).pt_neg()
 
     if final:
         return logh(params, b1)
@@ -141,10 +157,16 @@ def corruptPubKey(params, priv, OtherPubKeys=[]):
         public key corresponding to a private key known to the
         corrupt authority. """
     (G, g, h, o) = params
-    
-   # ADD CODE HERE
 
-    return pub
+    goodpub = priv * g
+    pub = G.infinite()
+
+    for key in OtherPubKeys:
+        pub = pub.pt_add(key)
+
+    badpub = goodpub + pub.pt_neg()
+
+    return badpub
 
 #####################################################
 # TASK 5 -- Implement operations to support a simple
@@ -156,8 +178,13 @@ def encode_vote(params, pub, vote):
         ciphertexts representing the count of votes for
         zero and the votes for one."""
     assert vote in [0, 1]
-
-   # ADD CODE HERE
+    
+    if vote == 0:
+        v0 = encrypt(params, pub, 1)#encode accordingly
+        v1 = encrypt(params, pub, 0)
+    else:
+        v0 = encrypt(params, pub, 0)
+        v1 = encrypt(params, pub, 1)
 
     return (v0, v1)
 
@@ -166,7 +193,12 @@ def process_votes(params, pub, encrypted_votes):
         to sum votes for zeros and votes for ones. """
     assert isinstance(encrypted_votes, list)
     
-   # ADD CODE HERE
+    tv0, tv1 = encrypted_votes[0] #initialise total to 1st vote in list
+
+    for encrypted_vote in encrypted_votes[1:]:#go through all the votes
+        v0, v1 = encrypted_vote
+        tv0 = add(params, pub, tv0, v0)#increase accordingly
+        tv1 = add(params, pub, tv1, v1)
 
     return tv0, tv1
 
@@ -217,7 +249,8 @@ def simulate_poll(votes):
 # What is the advantage of the adversary in guessing b given your implementation of 
 # Homomorphic addition? What are the security implications of this?
 
-""" Your Answer here """
+""" Because the result of homomorphic addition is always the same the adversary can figure
+the result of b by performing both options of the flip. """
 
 ###########################################################
 # TASK Q2 -- Answer questions regarding your implementation
@@ -228,4 +261,11 @@ def simulate_poll(votes):
 # that it yields an arbitrary result. Can those malicious actions 
 # be detected given your implementation?
 
-""" Your Answer here """
+""" a)The attacker can modify the code to always encode to 0 so when they count the votes 
+      there is no result
+
+    b)the attacker can encode the votes as they please so yielding any total amount they
+      want for each option(0 or 1)
+      
+      the first case can be detected when trying to decrypt phase in the simulate_vote it
+      would return no decryption found but the second could not be detected"""

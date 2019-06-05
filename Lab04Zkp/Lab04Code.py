@@ -51,7 +51,9 @@ def proveKey(params, priv, pub):
     """  
     (G, g, hs, o) = params
     
-    ## YOUR CODE HERE:
+    (w,W) = keyGen(params)
+    c = to_challenge([g,W])
+    r = (w - c * priv) % o
     
     return (c, r)
 
@@ -92,6 +94,20 @@ def proveCommitment(params, C, r, secrets):
     x0, x1, x2, x3 = secrets
 
     ## YOUR CODE HERE:
+    wr = o.random()
+    ws = [o.random() for _ in range(4)]
+    
+    W = ws[0]*h0 + ws[1]*h1 + ws[2]*h2 + ws[3]*h3 + wr*g
+
+    c = to_challenge([g, h0, h1, h2, h3, W])
+
+    responser = wr - c*r
+    response0 = ws[0] - c*x0
+    response1 = ws[1] - c*x1
+    response2 = ws[2] - c*x2
+    response3 = ws[3] - c*x3
+
+    responses = (response0, response1, response2, response3, responser)
 
     return (c, responses)
 
@@ -140,7 +156,7 @@ def verifyDLEquality(params, K, L, proof):
 
     ## YOUR CODE HERE:
 
-    return # YOUR RETURN HERE
+    return c == to_challenge([g, h0, r*g + c*K, r*h0 + c*L]) 
 
 #####################################################
 # TASK 4 -- Prove correct encryption and knowledge of 
@@ -163,7 +179,16 @@ def proveEnc(params, pub, Ciphertext, k, m):
     (G, g, (h0, h1, h2, h3), o) = params
     a, b = Ciphertext
 
-    ## YOUR CODE HERE:
+    w1 = o.random()
+    w2 = o.random()
+
+    Wa = w1*g
+    Wb = w2*h0 + w1*pub 
+
+    c = to_challenge([g, h0, pub, a, b, Wa, Wb])
+
+    rk = (w1 - c*k) % o
+    rm = (w2 - c*m) % o
 
     return (c, (rk, rm))
 
@@ -173,9 +198,10 @@ def verifyEnc(params, pub, Ciphertext, proof):
     a, b = Ciphertext    
     (c, (rk, rm)) = proof
 
-    ## YOUR CODE HERE:
+    Wa = rk*g + c*a
+    Wb = rm*h0 + rk*pub + c*b 
 
-    return ## YOUR RETURN HERE
+    return c == to_challenge([g, h0, pub, a, b, Wa, Wb])
 
 
 #####################################################
@@ -197,8 +223,6 @@ def relation(params, x1):
 def prove_x0eq10x1plus20(params, C, x0, x1, r):
     """ Prove C is a commitment to x0 and x1 and that x0 = 10 x1 + 20. """
     (G, g, (h0, h1, h2, h3), o) = params
-
-    ## YOUR CODE HERE:
 
     return ## YOUR RETURN HERE
 

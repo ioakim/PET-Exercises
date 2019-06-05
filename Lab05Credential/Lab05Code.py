@@ -90,7 +90,19 @@ def credential_EncryptUserSecret(params, pub, priv):
     #                     b = k * pub + v * g and 
     #                     pub = priv * g}
 
-    ## TODO
+    wk = o.random()
+    wv = o.random()
+    wpriv = o.random()
+
+    Wa = wk*g
+    Wb = wk*pub + wv*g
+    Wpub = wpriv*g
+
+    c = to_challenge([g,pub,a,b,Wa,Wb,Wpub])
+
+    rk = wk - c*k
+    rv = wv - c*v 
+    rpriv = wpriv - c*priv
 
     # Return the fresh v, the encryption of v and the proof.
     proof = (c, rk, rv, rpriv)
@@ -142,12 +154,18 @@ def credential_Issuing(params, pub, ciphertext, issuer_params):
     # 2) Create a X1b as X1b == b * X1 == (b * x1) * h
     #     and x1b = (b * x1) mod o 
     
-    # TODO 1 & 2
+    beta = o.random()
+    u = beta*g
+    X1b = beta*X1
+    x1b = (beta*x1)%o
 
     # 3) The encrypted MAC is u, and an encrypted u_prime defined as 
     #    E( (b*x0) * g + (x1 * b * v) * g ) + E(0; r_prime)
     
     # TODO 3
+    r_prime = o.random()
+    new_a = r_prime*g + x1b*a
+    new_b = r_prime*pub + x1b*b + x0*u
 
     ciphertext = new_a, new_b
 
@@ -162,6 +180,31 @@ def credential_Issuing(params, pub, ciphertext, issuer_params):
     #       Cx0 = x0 * g + x0_bar * h }
 
     ## TODO proof
+    wx1 = o.random()
+    wbeta = o.random()
+    wx1b = o.random()
+    wr_prime = o.random()
+    wx0 = o.random()
+    wx0_bar = o.random()
+
+    WX1 = wx1*h
+    WX1b = wbeta*X1
+    Wx1b = wx1b*h
+    Wu = wbeta*g
+    Wnew_a = wr_prime*g + wx1b*a
+    Wnew_b = wr_prime*pub + wx1b*b + wx0*u
+    WCx0 = wx0*g + wx0_bar*h
+
+    c = to_challenge([g,h,pub,a,b,X1,X1b,new_a,new_b,Cx0,WX1,WX1b,Wx1b,Wu,Wnew_a,Wnew_b,WCx0])
+
+    rx1 = wx1 - c*x1
+    rbeta = wbeta - c*beta
+    rx1b = wx1b - c*x1b
+    rr_prime = wr_prime - c*r_prime
+    rx0 = wx0 - c*x0
+    rx0_bar = wx0_bar - c*x0_bar
+
+    rs = (rx1,rbeta,rx1b,rr_prime,rx0,rx0_bar)
 
     proof = (c, rs, X1b) # Where rs are multiple responses
 
@@ -227,23 +270,46 @@ def credential_show(params, issuer_pub_params, u, u_prime, v):
     #    random alpha.
     
     # TODO 1
+    alpha = o.random()
+    blind_credentials = (alpha*u, alpha*u_prime)
+    blind_u, blind_u_prime = blind_credentials
 
     # 2) Implement the "Show" protocol (p.9) for a single attribute v.
     #    Cv is a commitment to v and Cup is C_{u'} in the paper. 
 
     # TODO 2
+    r = o.random()
+    z = o.random()
 
-    tag = (u, Cv, Cup)
+    Cup = blind_u_prime + r*g
+    Cv = v*blind_u + z*h
+
+    tag = (blind_u, Cv, Cup)
 
     # Proof or knowledge of the statement
     #
     # NIZK{(r, z1,v): 
     #           Cv = v *u + z1 * h and
     #           V  = r * (-g) + z1 * X1 }
-
+    
     ## TODO proof
 
-    proof = (c, rr, rz1, rv)
+    V = r*(-g) + z*X1
+
+    wr = o.random()
+    wz = o.random()
+    wv = o.random()
+
+    Wr = wr*(-g) + wz*X1
+    Wzv = wv*blind_u + wz*h
+
+    c = to_challenge([g,h,Wr,Wzv])
+
+    rr = wr - c*r
+    rz = wz - c*z
+    rv = wv - c*v
+
+    proof = (c, rr, rz, rv)
     return tag, proof
 
 def credential_show_verify(params, issuer_params, tag, proof):
@@ -257,10 +323,17 @@ def credential_show_verify(params, issuer_params, tag, proof):
     X1 = iparams
 
     # Verify proof of correct credential showing
-    (c, rr, rz1, rv) = proof
+    (c, rr, rz, rv) = proof
     (u, Cv, Cup) = tag
 
     ## TODO
+
+    V = (x0*u + x1*Cv) - Cup
+
+    Wr_prime = c*V + rr*(-g) + rz*X1
+    Wzv_prime = c*Cv + rv*u + rz*h
+
+    c_prime = to_challenge([g,h,Wr_prime,Wzv_prime])
 
     return c == c_prime
 
@@ -285,6 +358,47 @@ def credential_show_pseudonym(params, issuer_pub_params, u, u_prime, v, service_
     pseudonym = v * N
 
     ## TODO (use code from above and modify as necessary!)
+    alpha = o.random()
+    blind_credentials = (alpha*u, alpha*u_prime)
+    blind_u, blind_u_prime = blind_credentials
+
+    # 2) Implement the "Show" protocol (p.9) for a single attribute v.
+    #    Cv is a commitment to v and Cup is C_{u'} in the paper. 
+
+    # TODO 2
+    r = o.random()
+    z = o.random()
+
+    Cup = blind_u_prime + r*g
+    Cv = v*blind_u + z*h
+
+    tag = (blind_u, Cv, Cup)
+
+    # Proof or knowledge of the statement
+    #
+    # NIZK{(r, z1,v): 
+    #           Cv = v *u + z1 * h and
+    #           V  = r * (-g) + z1 * X1 }
+    
+    ## TODO proof
+
+    V = r*(-g) + z*X1
+
+    wr = o.random()
+    wz = o.random()
+    wv = o.random()
+
+    Wr = wr*(-g) + wz*X1
+    Wzv = wv*blind_u + wz*h
+    Wpseud = wv*N
+
+    c = to_challenge([g,h,Wr,Wzv,Wpseud])
+
+    rr = wr - c*r
+    rz = wz - c*z
+    rv = wv - c*v
+
+    proof = (c, rr, rz, rv)
 
     return pseudonym, tag, proof
 
@@ -303,8 +417,17 @@ def credential_show_verify_pseudonym(params, issuer_params, pseudonym, tag, proo
     N = G.hash_to_point(service_name)
 
     ## Verify the correct Show protocol and the correctness of the pseudonym
+    (c, rr, rz, rv) = proof
+    (u, Cv, Cup) = tag
 
     # TODO (use code from above and modify as necessary!)
+    V = (x0*u + x1*Cv) - Cup
+
+    Wr_prime = c*V + rr*(-g) + rz*X1
+    Wzv_prime = c*Cv + rv*u + rz*h
+    Wpseud = c*pseudonym + rv*N
+
+    c_prime = to_challenge([g,h,Wr_prime,Wzv_prime,Wpseud])
 
     return c == c_prime
 
@@ -317,4 +440,14 @@ def credential_show_verify_pseudonym(params, issuer_params, pseudonym, tag, proo
 # What would the credential represent, and what statements
 # would need to be shown to a verifier.
 
-""" Your answer here. """
+""" 
+The credential would represent the money and the id of who has it 
+for integrity. The money would be spent by showing the credential 
+to the verifier but only revealing the amount of money available.
+in order to avoid double-spending it is a good idea to use single 
+show credentials instead of multi-show because of the unlinkability
+property that would allow double-spending since the verifier wouldn't
+know that this was the same credential that was previously used.
+All this could be achieved by using the CL signature scheme which 
+can't be forged if you dont know the primes used for the signing.
+"""
